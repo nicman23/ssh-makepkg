@@ -1,37 +1,46 @@
 #! /bin/bash
 declare -a PKG
-port='-p 22'
+declare -a DEP
+declare -a BLD
+dep_num=1
+pkg_num=1
+
 function naming {
-  if [ -z pkg_num ] ; then $pkg_num=1 ; fi
-  PKG[$pkg_num]=$@
+  PKG[$pkg_num]=$1
   pkg_num=$((pkg_num+1))
 }
 
-declare -a DEP
-dep_num=1
-
 function check_installed {
-pacman -Qi $@ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-  then pacman -Qsq ^$@\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Si $@ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then DEP[$dep_num]=$1 ; dep_num=$((dep_num+1))
+  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+        then return 1 
+      fi
     fi
   fi
-fi
 }
 
 function missing_deps {
-temp=$(cower --format='%D' -i $1)
-for i in $temp ; do
-check_installed $(echo $i | cut -f1 -d">")
-done
+  local miss=$(cower --format='%D' -i $1)
+  for i in $miss
+    do check_installed $(echo $i | cut -f1 -d">") ; if [ $? = 1 ]
+      then DEP[$dep_num]=$i ; dep_num=$((dep_num+1))
+    fi
+  done
+}
+
+function deps_build {
+  local miss=$(cower --format='%K %M' -i $1 | cut -f1 -d">")
+  for i in $miss
+    do BLD[$dep_num]=$i ; dep_num=$((dep_num+1))
+  done
 }
 
 if [[ -z $(echo $@) ]] ; then echo 'use -h | --help' ; exit ; fi
 while true; do
   case $1 in
     '' 				) break ;;
-    *@*.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     *.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
@@ -39,41 +48,31 @@ while true; do
   esac
 done
 
-for i in $@ ; do
-missing_deps $i
-done
+if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit 2 ; fi
+
 
 localport=$(cat /etc/ssh/sshd_config | grep Port | grep -v Gate | cut -d ' ' -f 2) ; localport=$(echo -P $localport)
 export remoteuser=$USER
-export packages=$(echo ${PKG[@]})
-export pkgdeps=$(echo ${DEP[@]})
 if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 
-ssh -t $ip $(echo '-p' $port) export localport=\"$localport\" export pkgdeps=\"$pkgdeps\" export remoteuser=\"$remoteuser\" export pkg=\"$packages\" 'export iplocal=$( echo $SSH_CLIENT )' '
-export EDITOR=/bin/true
-export PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
+for i in ${PKG[@]} ; do
+  missing_deps $i ; done
+
+for i in ${PKG[@]} ; do
+  deps_build $i ; done
+
+pkg=${PKG[@]}
+dep=${DEP[@]} 
+bld=${BLD[@]}
+
+function_check_installed=$(type check_installed | grep -v function) ; echo $function_check_installed ; ssh -t $ip $(echo '-p' $port) "eval $function_check_installed" "
+export localport=\"$localport\"" "remoteuser=$remoteuser" "pkg=$pkg" "dep=$dep" "bld=$bld" '
+iplocal=$(echo $SSH_CLIENT)' 'EDITOR=/bin/true' '
+PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 while true; do sudo -v; sleep 40; done &
-
 sudo pacman -Syu
 
-declare -a aDEP
-export adep_num=1
-function aurdeps {
-if [ -z adep_num ] ; then $adep_num=1 ; fi
-pacman -Qi $@ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-  then pacman -Qsq ^$@\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Si $@ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then aDEP[$adep_num]=$1
-      adep_num=$((adep_num+1))
-    fi
-  fi
-fi
-}
-temp=$(cower --format='%D %K %M' -i $(echo $pkg $pkgdeps))
-for i in $temp
-  do aurdeps $(echo $i | cut -f1 -d">")
-done
 
 if [ ! -z $(echo ${aDEP[@]}) ]
   then if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
@@ -109,6 +108,7 @@ fi
 sudo -k
 '
 exit
+
 if [ -z $(ls /tmp/scp-receive/) ]
   then echo 'This should probably work... maybe'
   scp $ip:/tmp/scp/* /tmp/scp-receive/ $(echo '-P' $port) ; if [ ! $? = 0 ]
