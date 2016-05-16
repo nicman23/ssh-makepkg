@@ -130,9 +130,9 @@ if [ ! -z ${old_DEPs[@]} ] ; then
 
 rm -rf /tmp/build/
 echo Trying to scp
-scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ ! $? = 0 ] 
+scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ] 
   then rm -rf /tmp/scp/* 
-  else Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
+  else echo Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
 fi
 sudo -k
 killall -9 makepkg
