@@ -21,10 +21,10 @@ function check_installed {
 }
 
 function missing_deps {
-  local miss=$(cower --format='%D' -i $1)
+  local miss=$(cower --format='%D' -i $1 | cut -f1 -d">")
   for i in $miss
-    do check_installed $(echo $i | cut -f1 -d">") ; if [ $? = 1 ]
-      then DEP[$dep_num]=$i ; dep_num=$((dep_num+1))
+    do check_installed $i ; if [ $? = 1 ]
+      then export DEP="${DEP[@]} $i"
     fi
   done
 }
@@ -40,7 +40,7 @@ if [[ -z $(echo $@) ]] ; then echo 'use -h | --help' ; exit ; fi
 while true; do
   case $1 in
     '' 				) break ;;
-    *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *@*.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     *.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
@@ -64,12 +64,13 @@ for i in ${PKG[@]} ; do
 pkg=${PKG[@]}
 dep=${DEP[@]} 
 bld=${BLD[@]}
-
+echo $bld
+exit
 function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval $function_check_installed" "
-export localport=\"$localport\"" "remoteuser=$remoteuser" "pkg=$pkg" "dep=$dep" "bld=$bld" '
+export localport=\"$localport\"" "remoteuser=$remoteuser" "pkg=$pkg" "dep=$dep" echo "$bld" '
 iplocal=$(echo $SSH_CLIENT)' 'EDITOR=/bin/true' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
-
+echo $bld ; exit
 while true; do sudo -v; sleep 40; done &
 sudo pacman -Syu
 
@@ -83,10 +84,10 @@ function buildpkg {
 }
 
 function built {
-  builtat=$(find /tmp/scp/ -name "*.pkg.*" | grep $1)
+  local built=$(find /tmp/scp/ -name "*.pkg.*" | grep $1)
   if [[ ! -z $builtat ]]
     then echo Found previously built packages.
-    export builtat=$builtat
+    export builtat="$built $builtat"
     else return 0
   fi
 }
@@ -117,9 +118,8 @@ done
 
 for i in $(echo $pkg) ; do
   if [ -z $(echo $dep | grep $i) ]
-    then built $i ; if [ ! $? = 0 ]
-      then sudo pacman -U $builtat
-      else buildpkg $i
+    then built $i ; if [ $? = 0 ]
+      then buildpkg $i
     fi
     else echo $i has already been built
   fi
@@ -129,22 +129,22 @@ if [ ! -z ${old_DEPs[@]} ] ; then
   yes | sudo pacman -Rc ${old_DEPs[@]} ; fi
 
 rm -rf /tmp/build/
-echo Trying to scp
-scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ] 
-  then rm -rf /tmp/scp/* 
-  else echo Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
-fi
+#echo Trying to scp
+#scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ] 
+#  then rm -rf /tmp/scp/* 
+#  else echo Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
+#fi
 sudo -k
-killall -9 makepkg
 '
 
 if [ -z $(ls /tmp/scp-receive/) ]
-  then echo 'This should probably work... maybe'
-  scp $ip:/tmp/scp/* /tmp/scp-receive/ $(echo '-P' $port) ; if [ ! $? = 0 ]
+  then echo This should probably work... maybe
+  scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
     then echo 'Dunno what is up.... packages are most likely still there.'
   fi
-  ssh $ip $(echo '-P' $port) 'rm -rf /tmp/scp/*'
+  ssh $ip $(echo '-p' $port) 'rm -rf /tmp/scp/*'
 fi
+
 sudo -v
 sudo pacman -U /tmp/scp-receive/*
 sudo -k
@@ -154,4 +154,3 @@ case "$choice" in
   n|N|no ) exit ;;
   * ) exit ;;
 esac
-
