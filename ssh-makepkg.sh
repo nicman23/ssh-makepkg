@@ -61,16 +61,13 @@ for i in ${PKG[@]} ; do
 for i in ${PKG[@]} ; do
   deps_build $i ; done
 
-pkg=${PKG[@]}
-dep=${DEP[@]} 
-bld=${BLD[@]}
 echo $bld
-exit
+
 function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval $function_check_installed" "
-export localport=\"$localport\"" "remoteuser=$remoteuser" "pkg=$pkg" "dep=$dep" echo "$bld" '
+export localport=\"$localport\"" "remoteuser=$remoteuser" pkg="`echo '(' ${PKG[@]} ')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
 iplocal=$(echo $SSH_CLIENT)' 'EDITOR=/bin/true' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
-echo $bld ; exit
+
 while true; do sudo -v; sleep 40; done &
 sudo pacman -Syu
 
