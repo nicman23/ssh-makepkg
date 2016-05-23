@@ -45,7 +45,7 @@ while true; do
     *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
-    -e | --edit			) editor=$(which $EDITOR) ; shift ;;
+    -e | --edit			) export editor=$(which $EDITOR) ; shift ;;
     *				) naming $1 ; shift 1 ;;
   esac
 done
