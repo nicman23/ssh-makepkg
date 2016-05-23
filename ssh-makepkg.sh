@@ -73,6 +73,11 @@ declare -a old_DEPs
 dep_num=1
 iplocal=$(echo $iplocal | cut -d \  -f 1)
 
+function buildpkgdeps {
+  cower -d $1 ; cd $1 ; yes | makepkg -sri
+  cd /tmp/build ; rm -rf $1
+}
+
 function buildpkg {
   cower -d $1 ; cd $1 ; yes | makepkg -sri
   cd /tmp/build ; rm -rf $1
@@ -95,7 +100,7 @@ for i in $(echo $blk) ; do
     then check_installed $i ;  if [ $? = 1 ]
       then built $i ; if [ ! $? = 0 ]
         then sudo pacman -U $builtat
-        else buildpkg $i
+        else buildpkgdeps $i
       fi
       old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
     fi
@@ -107,7 +112,7 @@ export PKGDEST="/tmp/scp"
 for i in $(echo $dep) ; do
   built $i ; if [ ! $? = 0 ]
     then sudo pacman -U $builtat ; old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
-    else buildpkg $i
+    else buildpkgdeps $i
   fi
 done
 
@@ -132,12 +137,14 @@ rm -rf /tmp/build/
 sudo -k
 '
 
-if [ -z $(ls /tmp/scp-receive/) ]
-  then echo This should probably work... maybe
+if [ -z $( ls /tmp/scp-receive/ ) ]
+  then echo "This should probably work... maybe"
   scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
     then echo 'Dunno what is up.... packages are most likely still there.'
   fi
-  ssh $ip $(echo '-p' $port) 'rm -rf /tmp/scp/*'
+  ssh $ip $(echo '-p' $port) '
+    rm -rf /tmp/scp/*
+    '
 fi
 
 sudo -v
