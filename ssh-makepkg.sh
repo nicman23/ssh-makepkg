@@ -40,8 +40,8 @@ if [[ -z $(echo $@) ]] ; then echo 'use -h | --help' ; exit ; fi
 while true; do
   case $1 in
     '' 				) break ;;
-    *@*.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
-    *.*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
     *				) naming $1 ; shift 1 ;;
@@ -61,9 +61,7 @@ for i in ${PKG[@]} ; do
 for i in ${PKG[@]} ; do
   deps_build $i ; done
 
-echo $bld
-
-function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval $function_check_installed" "
+function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval '$(echo "$function_check_installed")'" "
 export localport=\"$localport\"" "remoteuser=$remoteuser" pkg="`echo '(' ${PKG[@]} ')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
 iplocal=$(echo $SSH_CLIENT)' 'EDITOR=/bin/true' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
