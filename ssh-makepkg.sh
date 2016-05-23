@@ -4,6 +4,7 @@ declare -a DEP
 declare -a BLD
 dep_num=1
 pkg_num=1
+editor=/bin/true
 
 function naming {
   PKG[$pkg_num]=$1
@@ -44,6 +45,7 @@ while true; do
     *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
+    -e | --edit			) editor=$(which $EDITOR) ; shift ;;
     *				) naming $1 ; shift 1 ;;
   esac
 done
@@ -62,8 +64,8 @@ for i in ${PKG[@]} ; do
   deps_build $i ; done
 
 function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval '$(echo "$function_check_installed")'" "
-export localport=\"$localport\"" "remoteuser=$remoteuser" pkg="`echo '(' ${PKG[@]} ')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
-iplocal=$(echo $SSH_CLIENT)' 'EDITOR=/bin/true' '
+export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '(' ${PKG[@]} ')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
+iplocal=$(echo $SSH_CLIENT)' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 while true; do sudo -v; sleep 40; done &
@@ -79,7 +81,7 @@ function buildpkgdeps {
 }
 
 function buildpkg {
-  cower -d $1 ; cd $1 ; yes | makepkg -sri
+  cower -d $1 ; cd $1 ; yes | makepkg -sr
   cd /tmp/build ; rm -rf $1
 }
 
@@ -138,7 +140,7 @@ sudo -k
 '
 
 if [ -z $( ls /tmp/scp-receive/ ) ]
-  then echo "This should probably work... maybe"
+  then echo "SCP into machine to download packages"
   scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
     then echo 'Dunno what is up.... packages are most likely still there.'
   fi
