@@ -139,14 +139,11 @@ rm -rf /tmp/build/
 sudo -k
 '
 
-if [ -z $( ls /tmp/scp-receive/ ) ]
-  then echo "SCP into machine to download packages"
-  scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
-    then echo 'Dunno what is up.... packages are most likely still there.'
-  fi
-  ssh $ip $(echo '-p' $port) '
-    rm -rf /tmp/scp/*
-    '
+echo "SCP into machine to download packages"
+scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ] 
+  then echo 'Dunno what is up.... packages are most likely still there.'
+  else ssh $ip $(echo '-p' $port) '
+    rm -rf /tmp/scp/*'
 fi
 
 sudo -v
