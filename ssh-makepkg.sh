@@ -64,7 +64,7 @@ for i in ${PKG[@]} ; do
   deps_build $i ; done
 
 function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval '$(echo "$function_check_installed")'" "
-export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '(' ${PKG[@]} ')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
+export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
 iplocal=$(echo $SSH_CLIENT)' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
@@ -97,8 +97,8 @@ function built {
 if [ ! -e /tmp/scp ] ; then mkdir /tmp/scp ; fi
 if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
 
-for i in $(echo $blk) ; do
-  if [ -z $(echo $pkg | grep $i) ] || [ -z $(echo $dep | grep $i) ]
+for i in $(echo ${blk[@]}) ; do
+  if [ -z $(echo ${pkg[@]} | grep $i) ] || [ -z $(echo ${dep[@]} | grep $i) ]
     then check_installed $i ;  if [ $? = 1 ]
       then built $i ; if [ ! $? = 0 ]
         then sudo pacman -U $builtat
@@ -111,15 +111,15 @@ done
 
 export PKGDEST="/tmp/scp"
 
-for i in $(echo $dep) ; do
+for i in $(echo ${dep[@]}) ; do
   built $i ; if [ ! $? = 0 ]
     then sudo pacman -U $builtat ; old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
     else buildpkgdeps $i
   fi
 done
 
-for i in $(echo $pkg) ; do
-  if [ -z $(echo $dep | grep $i) ]
+for i in $(echo ${pkg[@]}) ; do
+  if [ -z $(echo ${dep[@]} | grep $i) ]
     then built $i ; if [ $? = 0 ]
       then buildpkg $i
     fi
