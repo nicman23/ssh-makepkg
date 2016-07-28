@@ -1,4 +1,5 @@
 #! /bin/bash
+port=22
 declare -a PKG
 declare -a DEP
 declare -a BLD
@@ -15,7 +16,7 @@ function check_installed {
   pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
     then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
       then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-        then return 1 
+        then return 1
       fi
     fi
   fi
@@ -37,15 +38,30 @@ function deps_build {
   done
 }
 
-if [[ -z $(echo $@) ]] ; then echo 'use -h | --help' ; exit ; fi
+help='Usage: (user@)host (-p 22) (-e) pkg1 pkg2 pkg3
+
+Arguments in parenthesis can be ommited.
+
+-p: port (defaults to 22)
+-e: edit pkgbuilds (defaults to /bin/true - no editor)
+
+Packages are to be separated by space. There is no need for them to be in order.
+Dependencies are to be automatically resolved in both the remote and local machine.
+In the remote machine are automatically uninstalled when not needed.
+
+Example: nikos@1.2.3.4 -p 123 sway-git wlc-git
+'
+
+
+if [[ -z $(echo $@) ]] ; then echo 'use -h | --help for help' ; exit ; fi
 while true; do
   case $1 in
     '' 				) break ;;
     *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
-    -h | --help			) echo 'Just write the remote machine as you would in a ssh command (-p for port) and the aur packages you want to install' ; exit 0 ;;
-    -e | --edit			) export editor=$(which $EDITOR) ; shift ;;
+    -h | --help			) echo "$help" ; exit 0 ;;
+    -e | --edit			) export editor=$EDITOR ; shift ;;
     *				) naming $1 ; shift 1 ;;
   esac
 done
@@ -63,7 +79,8 @@ for i in ${PKG[@]} ; do
 for i in ${PKG[@]} ; do
   deps_build $i ; done
 
-function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "eval '$(echo "$function_check_installed")'" "
+function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "
+eval $(echo "$function_check_installed")" "
 export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
 iplocal=$(echo $SSH_CLIENT)' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
@@ -76,12 +93,12 @@ dep_num=1
 iplocal=$(echo $iplocal | cut -d \  -f 1)
 
 function buildpkgdeps {
-  cower -d $1 ; cd $1 ; yes | makepkg -sri
+  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sri
   cd /tmp/build ; rm -rf $1
 }
 
 function buildpkg {
-  cower -d $1 ; cd $1 ; yes | makepkg -sr
+  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sr
   cd /tmp/build ; rm -rf $1
 }
 
