@@ -6,6 +6,8 @@ declare -a BLD
 dep_num=1
 pkg_num=1
 editor=/bin/true
+quiet='2> /dev/null > /dev/null'
+
 
 function naming {
   PKG[$pkg_num]=$1
@@ -114,7 +116,7 @@ function built {
 if [ ! -e /tmp/scp ] ; then mkdir /tmp/scp ; fi
 if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
 
-for i in $(echo ${blk[@]}) ; do
+for i in $(echo ${bld[@]}) ; do
   if [ -z $(echo ${pkg[@]} | grep $i) ] || [ -z $(echo ${dep[@]} | grep $i) ]
     then check_installed $i ;  if [ $? = 1 ]
       then built $i ; if [ ! $? = 0 ]
@@ -144,20 +146,20 @@ for i in $(echo ${pkg[@]}) ; do
   fi
 done
 
-if [ ! -z ${old_DEPs[@]} ] ; then 
+if [ ! -z ${old_DEPs[@]} ] ; then
   yes | sudo pacman -Rc ${old_DEPs[@]} ; fi
 
 rm -rf /tmp/build/
 #echo Trying to scp
-#scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ] 
-#  then rm -rf /tmp/scp/* 
+#scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ]
+#  then rm -rf /tmp/scp/*
 #  else echo Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
 #fi
 sudo -k
 '
 
 echo "SCP into machine to download packages"
-scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ] 
+scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
   then echo 'Dunno what is up.... packages are most likely still there.'
   else ssh $ip $(echo '-p' $port) '
     rm -rf /tmp/scp/*'
@@ -169,6 +171,6 @@ sudo -k
 read -p "Delete pkgs? y/n?" choice
 case "$choice" in
   y|Y|yes ) rm -rf /tmp/scp-receive/* ;;
-  n|N|no ) exit ;;
+  n|N|no  ) exit ;;
   * ) exit ;;
 esac
