@@ -6,8 +6,15 @@ declare -a BLD
 dep_num=1
 pkg_num=1
 editor=/bin/true
-quiet='2> /dev/null > /dev/null'
 
+function ipset {
+  if [ -z $ipnotset ]
+  then export ip=$1
+    export ipnotset=false
+  else echo 'Ip was parsed multiple times'
+    exit 2
+  fi
+}
 
 function naming {
   PKG[$pkg_num]=$1
@@ -54,17 +61,17 @@ In the remote machine are automatically uninstalled when not needed.
 Example: nikos@1.2.3.4 -p 123 sway-git wlc-git
 '
 
-
 if [[ -z $(echo $@) ]] ; then echo 'use -h | --help for help' ; exit ; fi
 while true; do
   case $1 in
     '' 				) break ;;
-    *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
-    *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
-    *.lan			) ping $1 -c1 &> /dev/null ; if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *@*.*.* 			) ipset $@ ; shift ;;
+    *.*.* 			) ipset $@ ; shift ;;
+    *.lan			) ping $1 -c1 &> /dev/null ; if [ "$?" = '0' ] ; then ipset $@ ; fi ; shift ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo "$help" ; exit 0 ;;
     -e | --edit			) export editor=$EDITOR ; shift ;;
+    */PKGBUILD			) echo wip ; exit 4;shift ;;
     *				) naming $1 ; shift 1 ;;
   esac
 done
