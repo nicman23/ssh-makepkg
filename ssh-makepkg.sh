@@ -61,6 +61,7 @@ while true; do
     '' 				) break ;;
     *@*.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     *.*.* 			) if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
+    *.lan			) ping $1 -c1 &> /dev/null ; if [ -z $ipnotset ] ; then export ip=$1 ; export ipnotset=false ; shift ; else echo 'Ip was parsed multiple times' ; exit 2 ; fi ;;
     -p				) export port=$2 ; shift 2 ;;
     -h | --help			) echo "$help" ; exit 0 ;;
     -e | --edit			) export editor=$EDITOR ; shift ;;
@@ -69,7 +70,6 @@ while true; do
 done
 
 if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit 2 ; fi
-
 
 localport=$(cat /etc/ssh/sshd_config | grep Port | grep -v Gate | cut -d ' ' -f 2) ; localport=$(echo -P $localport)
 export remoteuser=$USER
