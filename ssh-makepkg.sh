@@ -78,8 +78,10 @@ done
 
 if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit 2 ; fi
 
-localport=$(cat /etc/ssh/sshd_config | grep Port | grep -v Gate | cut -d ' ' -f 2) ; localport=$(echo -P $localport)
+localport=$(cat /etc/ssh/sshd_config | grep Port | grep -v Gate | cut -d ' ' -f 2)
+localport=$(echo -P $localport)
 export remoteuser=$USER
+function_check_installed=$(type check_installed | grep -v function)
 if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 
 for i in ${PKG[@]} ; do
@@ -88,10 +90,10 @@ for i in ${PKG[@]} ; do
 for i in ${PKG[@]} ; do
   deps_build $i ; done
 
-function_check_installed=$(type check_installed | grep -v function) ; ssh -t $ip $(echo '-p' $port) "
+
+ssh -t $ip $(echo '-p' $port) "
 eval $(echo "$function_check_installed")" "
 export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
-iplocal=$(echo $SSH_CLIENT)' '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 while true; do sudo -v; sleep 40; done &
@@ -99,7 +101,6 @@ sudo pacman -Syu
 
 declare -a old_DEPs
 dep_num=1
-iplocal=$(echo $iplocal | cut -d \  -f 1)
 
 function buildpkgdeps {
   cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sri
@@ -157,11 +158,6 @@ if [ ! -z ${old_DEPs[@]} ] ; then
   yes | sudo pacman -Rc ${old_DEPs[@]} ; fi
 
 rm -rf /tmp/build/
-#echo Trying to scp
-#scp $localport /tmp/scp/* $remoteuser@$iplocal:/tmp/scp-receive ; if [ $? = 0 ]
-#  then rm -rf /tmp/scp/*
-#  else echo Something went wrong with scp from the remote machine side. Are you behind nat\? Built packages are in /tmp/scp .
-#fi
 sudo -k
 '
 
