@@ -78,10 +78,6 @@ done
 
 if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit 2 ; fi
 
-localport=$(cat /etc/ssh/sshd_config | grep Port | grep -v Gate | cut -d ' ' -f 2)
-localport=$(echo -P $localport)
-export remoteuser=$USER
-function_check_installed=$(type check_installed | grep -v function)
 if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 
 for i in ${PKG[@]} ; do
@@ -91,12 +87,20 @@ for i in ${PKG[@]} ; do
   deps_build $i ; done
 
 
-ssh -t $ip $(echo '-p' $port) "
-eval $(echo "$function_check_installed")" "
-export localport=\"$localport\"" "remoteuser=$remoteuser" "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
+ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
-while true; do sudo -v; sleep 40; done &
+function check_installed {
+  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
+        then return 1
+      fi
+    fi
+  fi
+}
+
+sudo -v
 sudo pacman -Syu
 
 declare -a old_DEPs
@@ -125,7 +129,7 @@ if [ ! -e /tmp/scp ] ; then mkdir /tmp/scp ; fi
 if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
 
 for i in $(echo ${bld[@]}) ; do
-  if [ -z $(echo ${pkg[@]} | grep $i) ] || [ -z $(echo ${dep[@]} | grep $i) ]
+  if [ -z "$(echo ${pkg[@]} | grep $i)" ] || [ -z "$(echo ${dep[@]} | grep $i)" ]
     then check_installed $i ;  if [ $? = 1 ]
       then built $i ; if [ ! $? = 0 ]
         then sudo pacman -U $builtat
