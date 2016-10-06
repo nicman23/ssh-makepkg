@@ -123,13 +123,21 @@ function deps_calc {
   done
 }
 
-function Build {
+function Build_deps {
   cower -fd $1 ; cd $1
   if [ -e ~/.config/aur-hooks/$1.hook ]
     then bash ~/.config/aur-hooks/$1.hook
   fi
   $EDITOR PKGBUILD ; yes \  | makepkg -fsri
   old_DEPs=( $1 ${old_DEPs[@]} )
+}
+
+function Build {
+  cower -fd $1 ; cd $1
+  if [ -e ~/.config/aur-hooks/$1.hook ]
+    then bash ~/.config/aur-hooks/$1.hook
+  fi
+  $EDITOR PKGBUILD ; yes \  | makepkg -fsr
 }
 
 sudo -v
@@ -144,7 +152,7 @@ for i in ${PKG[@]}
 done
 
 for i in ${DEP[@]}
- do Build $i
+ do Build_deps $i
  PKG=( ${PKG[@]/%$i} )
 done
 
@@ -152,13 +160,13 @@ for i in ${PKG[@]} ; do
   Build $i
 done
 
-if [ ! -z ${old_DEPs[@]} ] ; then
+if [ ! -z "${old_DEPs[@]}" ] ; then
   yes | sudo pacman -Rc ${old_DEPs[@]} ; fi
 
 rm -rf /tmp/build/
 sudo -k
 '
-exit
+
 echo "SCP into machine to download packages"
 scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
   then echo 'Dunno what is up.... packages are most likely still there.'
