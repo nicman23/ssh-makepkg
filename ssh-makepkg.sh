@@ -2,7 +2,7 @@
 port=22
 declare -a PKG
 declare -a DEP
-declare -a BLD
+declare -a TEMP
 editor=/bin/true
 
 function ipset {
@@ -15,20 +15,27 @@ function ipset {
 }
 
 function check_installed {
-  pacman -Qi $1 &> /dev/null ||
-    pacman -Qsq ^$1\$ &> /dev/null ||
-      pacman -Si $1 &> /dev/null ||
-        DEP=( $1 ${DEP[@]/%$1} )
-        return 1
+  pacman -Qi $1 &> /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ &> /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 &> /dev/null ; if [ ! $? = 0 ]
+        then DEP=( $1 ${DEP[@]/%$1} ) && return 1
+      fi
+    fi
+  fi
 }
 
 function deps_calc {
-  local loop=true
-  for i in $(cower --format='%D %K %M' -i $1)
+  if [ "$(echo ${TEMP[@]} | grep $@)" ]
+    then break 1
+  fi
+  temp=$(cower --format='%D %K %M' -i $@)
+  for i in $temp
     do while true
-      do check_installed "$(echo $i | cut -f1 -d">")"
+      do temp2=$(echo $i | cut -f1 -d">")
+      TEMP=( $temp2 ${TEMP[@]} )
+      check_installed $temp2
         if [ "$?" = 1 ]
-          then deps_calc "$(echo $i | cut -f1 -d">")"
+          then deps_calc $temp2
           else break 1
         fi
       done
@@ -72,27 +79,44 @@ if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 for i in ${PKG[@]} ; do
   deps_calc $i ; done
 
-ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '(' ${DEP[@]} ${PKG[@]}')'`" '
+
+
+ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" "
+export pkg=\"$(echo ${PKG[@]})\" " "
+export dep=\"$(echo ${DEP[@]})\" " '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 declare -a old_DEPs
+declare -a DEP
+declare -a PKG
 export PKGDEST="/tmp/scp"
 
+for i in $dep $pkg
+  do PKG=( ${PKG[@]} $i )
+done
+
 function check_installed {
-  pacman -Qi $1 &> /dev/null ||
-    pacman -Qsq ^$1\$ &> /dev/null ||
-      pacman -Si $1 &> /dev/null ||
-        DEP=( $1 ${DEP[@]/%$1} )
-        return 1
+  pacman -Qi $1 &> /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ &> /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 &> /dev/null ; if [ ! $? = 0 ]
+        then DEP=( $1 ${DEP[@]/%$1} ) && return 1
+      fi
+    fi
+  fi
 }
 
 function deps_calc {
-  local loop=true
-  for i in $(cower --format='%D %K %M' -i $1)
+  if [ "$(echo ${TEMP[@]} | grep $@)" ]
+    then break 1
+  fi
+  temp=$(cower --format='%D %K %M' -i $@)
+  for i in $temp
     do while true
-      do check_installed "$(echo $i | cut -f1 -d">")"
+      do temp2=$(echo $i | cut -f1 -d">")
+      TEMP=( $temp2 ${TEMP[@]} )
+      check_installed $temp2
         if [ "$?" = 1 ]
-          then deps_calc "$(echo $i | cut -f1 -d">")"
+          then deps_calc $temp2
           else break 1
         fi
       done
@@ -115,10 +139,17 @@ sudo pacman -Syu
 [ ! -e /tmp/build ] && mkdir /tmp/build
 cd /tmp/build
 
+for i in ${PKG[@]}
+  do deps_calc $i
+done
+
+echo  ${DEP[@]} ${PKG[@]}
+exit
+
 for i in ${DEP[@]}
  do Build $i
  PKG=( ${PKG[@]/%$i} )
- done
+done
 
 for i in ${PKG[@]} ; do
   Build $i
@@ -130,7 +161,7 @@ if [ ! -z ${old_DEPs[@]} ] ; then
 rm -rf /tmp/build/
 sudo -k
 '
-
+exit
 echo "SCP into machine to download packages"
 scp $(echo '-P' $port) $ip:/tmp/scp/* /tmp/scp-receive/ ; if [ ! $? = 0 ]
   then echo 'Dunno what is up.... packages are most likely still there.'
