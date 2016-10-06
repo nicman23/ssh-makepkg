@@ -18,21 +18,20 @@ function check_installed {
   pacman -Qi $1 &> /dev/null ||
     pacman -Qsq ^$1\$ &> /dev/null ||
       pacman -Si $1 &> /dev/null ||
+        DEP=( $1 ${DEP[@]/%$1} )
         return 1
 }
 
-function missing_deps {
-  local miss=$(cower --format='%D' -i $1 | cut -f1 -d">")
-  for i in $miss
-    do check_installed $i ||
-    DEP=( $i ${DEP[@]/$i} )
-  done
-}
-
-function deps_build {
-  local miss=$(cower --format='%D %K %M' -i $1 | cut -f1 -d">")
-  for i in $miss
-    do BLD=( $i ${BLD[@]/$i} )
+function deps_calc {
+  local loop=true
+  for i in $(cower --format='%D %K %M' -i $1)
+    do while true
+      do check_installed "$(echo $i | cut -f1 -d">")"
+        if [ "$?" = 1 ]
+          then deps_calc "$(echo $i | cut -f1 -d">")"
+          else break 1
+        fi
+      done
   done
 }
 
@@ -62,7 +61,7 @@ while true; do
     -h | --help	  ) echo "$help" ; exit 0 ;;
     -e | --edit   ) export editor=$EDITOR ; shift ;;
     */PKGBUILD    ) echo wip ; exit 4 ; shift ;;
-    *             ) PKG=( $1 ${PKG[@]/$1} ) ; shift 1 ;;
+    *             ) PKG=( $1 ${PKG[@]/%$1} ) ; shift 1 ;;
   esac
 done
 
@@ -71,86 +70,58 @@ if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit
 if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 
 for i in ${PKG[@]} ; do
-  missing_deps $i ; done
+  deps_calc $i ; done
 
-for i in ${PKG[@]} ; do
-  deps_build $i ; done
-
-
-ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
+ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '(' ${DEP[@]} ${PKG[@]}')'`" '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
+
+declare -a old_DEPs
+export PKGDEST="/tmp/scp"
 
 function check_installed {
   pacman -Qi $1 &> /dev/null ||
     pacman -Qsq ^$1\$ &> /dev/null ||
       pacman -Si $1 &> /dev/null ||
+        DEP=( $1 ${DEP[@]/%$1} )
         return 1
 }
 
-sudo -v
-sudo pacman -Syu
+function deps_calc {
+  local loop=true
+  for i in $(cower --format='%D %K %M' -i $1)
+    do while true
+      do check_installed "$(echo $i | cut -f1 -d">")"
+        if [ "$?" = 1 ]
+          then deps_calc "$(echo $i | cut -f1 -d">")"
+          else break 1
+        fi
+      done
+  done
+}
 
-declare -a old_DEPs
-
-function buildpkgdeps {
+function Build {
   cower -fd $1 ; cd $1
   if [ -e ~/.config/aur-hooks/$1.hook ]
     then bash ~/.config/aur-hooks/$1.hook
   fi
   $EDITOR PKGBUILD ; yes \  | makepkg -fsri
-  cd /tmp/build ; rm -rf $1
+  old_DEPs=( $1 ${old_DEPs[@]} )
 }
 
-function buildpkg {
-  cower -fd $1 ; cd $1
-  if [ -e ~/.config/aur-hooks/$1.hook ]
-    then bash ~/.config/aur-hooks/$1.hook
-  fi
-  $EDITOR PKGBUILD ; yes \  | makepkg -fsr
-  cd /tmp/build ; rm -rf $1
-}
-
-function built {
-  local built=$(find /tmp/scp/ -name "*.pkg.*" | grep $1)
-  if [[ ! -z $builtat ]]
-    then echo Found previously built packages.
-    export builtat="$built $builtat"
-    else return 0
-  fi
-}
+sudo -v
+sudo pacman -Syu
 
 [ ! -e /tmp/scp ] && mkdir /tmp/scp
 [ ! -e /tmp/build ] && mkdir /tmp/build
 cd /tmp/build
 
-for i in $(echo ${bld[@]}) ; do
-  if [ -z "$(echo ${pkg[@]} | grep $i)" ] || [ -z "$(echo ${dep[@]} | grep $i)" ]
-    then check_installed $i ;  if [ $? = 1 ]
-      then built $i ; if [ ! $? = 0 ]
-        then sudo pacman -U $builtat
-        else buildpkgdeps $i
-      fi
-      old_DEPs=( $i ${old_DEPs[@]/$i} )
-    fi
-  fi
-done
+for i in ${DEP[@]}
+ do Build $i
+ PKG=( ${PKG[@]/%$i} )
+ done
 
-export PKGDEST="/tmp/scp"
-
-for i in $(echo ${dep[@]}) ; do
-  built $i ; if [ ! $? = 0 ]
-    then sudo pacman -U $builtat ; old_DEPs=( $i ${old_DEPs[@]/$i} )
-    else buildpkgdeps $i
-  fi
-done
-
-for i in $(echo ${pkg[@]}) ; do
-  if [ -z $(echo ${dep[@]} | grep $i) ]
-    then built $i ; if [ $? = 0 ]
-      then buildpkg $i
-    fi
-    else echo $i has already been built
-  fi
+for i in ${PKG[@]} ; do
+  Build $i
 done
 
 if [ ! -z ${old_DEPs[@]} ] ; then
