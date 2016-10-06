@@ -143,9 +143,6 @@ for i in ${PKG[@]}
   do deps_calc $i
 done
 
-echo  ${DEP[@]} ${PKG[@]}
-exit
-
 for i in ${DEP[@]}
  do Build $i
  PKG=( ${PKG[@]/%$i} )
