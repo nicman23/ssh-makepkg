@@ -3,8 +3,6 @@ port=22
 declare -a PKG
 declare -a DEP
 declare -a BLD
-dep_num=1
-pkg_num=1
 editor=/bin/true
 
 function ipset {
@@ -16,34 +14,25 @@ function ipset {
   fi
 }
 
-function naming {
-  PKG[$pkg_num]=$1
-  pkg_num=$((pkg_num+1))
-}
-
 function check_installed {
-  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-        then return 1
-      fi
-    fi
-  fi
+  pacman -Qi $1 &> /dev/null ||
+    pacman -Qsq ^$1\$ &> /dev/null ||
+      pacman -Si $1 &> /dev/null ||
+        return 1
 }
 
 function missing_deps {
   local miss=$(cower --format='%D' -i $1 | cut -f1 -d">")
   for i in $miss
-    do check_installed $i ; if [ $? = 1 ]
-      then export DEP="${DEP[@]} $i"
-    fi
+    do check_installed $i ||
+    DEP=( $i ${DEP[@]/$i} )
   done
 }
 
 function deps_build {
   local miss=$(cower --format='%D %K %M' -i $1 | cut -f1 -d">")
   for i in $miss
-    do BLD[$dep_num]=$i ; dep_num=$((dep_num+1))
+    do BLD=( $i ${BLD[@]/$i} )
   done
 }
 
@@ -62,17 +51,18 @@ Example: nikos@1.2.3.4 -p 123 sway-git wlc-git
 '
 
 if [[ -z $(echo $@) ]] ; then echo 'use -h | --help for help' ; exit ; fi
+
 while true; do
   case $1 in
-    '' 				) break ;;
-    *@*.*.* 			) ipset $@ ; shift ;;
-    *.*.* 			) ipset $@ ; shift ;;
-    *.lan			) ping $1 -c1 &> /dev/null ; if [ "$?" = '0' ] ; then ipset $@ ; fi ; shift ;;
-    -p				) export port=$2 ; shift 2 ;;
-    -h | --help			) echo "$help" ; exit 0 ;;
-    -e | --edit			) export editor=$EDITOR ; shift ;;
-    */PKGBUILD			) echo wip ; exit 4;shift ;;
-    *				) naming $1 ; shift 1 ;;
+    ''            ) break ;;
+    *@*.*.*       ) ipset $@ ; shift ;;
+    *.*.*         ) ipset $@ ; shift ;;
+    *.lan			    ) ping $1 -c1 &> /dev/null && ipset $@ ; shift ;;
+    -p				    ) export port=$2 ; shift 2 ;;
+    -h | --help	  ) echo "$help" ; exit 0 ;;
+    -e | --edit   ) export editor=$EDITOR ; shift ;;
+    */PKGBUILD    ) echo wip ; exit 4 ; shift ;;
+    *             ) PKG=( $1 ${PKG[@]/$1} ) ; shift 1 ;;
   esac
 done
 
@@ -91,28 +81,32 @@ ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 function check_installed {
-  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-        then return 1
-      fi
-    fi
-  fi
+  pacman -Qi $1 &> /dev/null ||
+    pacman -Qsq ^$1\$ &> /dev/null ||
+      pacman -Si $1 &> /dev/null ||
+        return 1
 }
 
 sudo -v
 sudo pacman -Syu
 
 declare -a old_DEPs
-dep_num=1
 
 function buildpkgdeps {
-  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sri
+  cower -fd $1 ; cd $1
+  if [ -e ~/.config/aur-hooks/$1.hook ]
+    then bash ~/.config/aur-hooks/$1.hook
+  fi
+  $EDITOR PKGBUILD ; yes \  | makepkg -fsri
   cd /tmp/build ; rm -rf $1
 }
 
 function buildpkg {
-  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sr
+  cower -fd $1 ; cd $1
+  if [ -e ~/.config/aur-hooks/$1.hook ]
+    then bash ~/.config/aur-hooks/$1.hook
+  fi
+  $EDITOR PKGBUILD ; yes \  | makepkg -fsr
   cd /tmp/build ; rm -rf $1
 }
 
@@ -125,8 +119,9 @@ function built {
   fi
 }
 
-if [ ! -e /tmp/scp ] ; then mkdir /tmp/scp ; fi
-if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
+[ ! -e /tmp/scp ] && mkdir /tmp/scp
+[ ! -e /tmp/build ] && mkdir /tmp/build
+cd /tmp/build
 
 for i in $(echo ${bld[@]}) ; do
   if [ -z "$(echo ${pkg[@]} | grep $i)" ] || [ -z "$(echo ${dep[@]} | grep $i)" ]
@@ -135,7 +130,7 @@ for i in $(echo ${bld[@]}) ; do
         then sudo pacman -U $builtat
         else buildpkgdeps $i
       fi
-      old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
+      old_DEPs=( $i ${old_DEPs[@]/$i} )
     fi
   fi
 done
@@ -144,7 +139,7 @@ export PKGDEST="/tmp/scp"
 
 for i in $(echo ${dep[@]}) ; do
   built $i ; if [ ! $? = 0 ]
-    then sudo pacman -U $builtat ; old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
+    then sudo pacman -U $builtat ; old_DEPs=( $i ${old_DEPs[@]/$i} )
     else buildpkgdeps $i
   fi
 done
