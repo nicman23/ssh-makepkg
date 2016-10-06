@@ -2,9 +2,7 @@
 port=22
 declare -a PKG
 declare -a DEP
-declare -a BLD
-dep_num=1
-pkg_num=1
+declare -a TEMP
 editor=/bin/true
 
 function ipset {
@@ -16,34 +14,31 @@ function ipset {
   fi
 }
 
-function naming {
-  PKG[$pkg_num]=$1
-  pkg_num=$((pkg_num+1))
-}
-
 function check_installed {
-  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-        then return 1
+  pacman -Qi $1 &> /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ &> /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 &> /dev/null ; if [ ! $? = 0 ]
+        then DEP=( $1 ${DEP[@]/%$1} ) && return 1
       fi
     fi
   fi
 }
 
-function missing_deps {
-  local miss=$(cower --format='%D' -i $1 | cut -f1 -d">")
-  for i in $miss
-    do check_installed $i ; if [ $? = 1 ]
-      then export DEP="${DEP[@]} $i"
-    fi
-  done
-}
-
-function deps_build {
-  local miss=$(cower --format='%D %K %M' -i $1 | cut -f1 -d">")
-  for i in $miss
-    do BLD[$dep_num]=$i ; dep_num=$((dep_num+1))
+function deps_calc {
+  if [ "$(echo ${TEMP[@]} | grep $@)" ]
+    then break 1
+  fi
+  temp=$(cower --format='%D %K %M' -i $@)
+  for i in $temp
+    do while true
+      do temp2=$(echo $i | cut -f1 -d">")
+      TEMP=( $temp2 ${TEMP[@]} )
+      check_installed $temp2
+        if [ "$?" = 1 ]
+          then deps_calc $temp2
+          else break 1
+        fi
+      done
   done
 }
 
@@ -62,17 +57,18 @@ Example: nikos@1.2.3.4 -p 123 sway-git wlc-git
 '
 
 if [[ -z $(echo $@) ]] ; then echo 'use -h | --help for help' ; exit ; fi
+
 while true; do
   case $1 in
-    '' 				) break ;;
-    *@*.*.* 			) ipset $@ ; shift ;;
-    *.*.* 			) ipset $@ ; shift ;;
-    *.lan			) ping $1 -c1 &> /dev/null ; if [ "$?" = '0' ] ; then ipset $@ ; fi ; shift ;;
-    -p				) export port=$2 ; shift 2 ;;
-    -h | --help			) echo "$help" ; exit 0 ;;
-    -e | --edit			) export editor=$EDITOR ; shift ;;
-    */PKGBUILD			) echo wip ; exit 4;shift ;;
-    *				) naming $1 ; shift 1 ;;
+    ''            ) break ;;
+    *@*.*.*       ) ipset $@ ; shift ;;
+    *.*.*         ) ipset $@ ; shift ;;
+    *.lan			    ) ping $1 -c1 &> /dev/null && ipset $@ ; shift ;;
+    -p				    ) export port=$2 ; shift 2 ;;
+    -h | --help	  ) echo "$help" ; exit 0 ;;
+    -e | --edit   ) export editor=$EDITOR ; shift ;;
+    */PKGBUILD    ) echo wip ; exit 4 ; shift ;;
+    *             ) PKG=( $1 ${PKG[@]/%$1} ) ; shift 1 ;;
   esac
 done
 
@@ -81,84 +77,90 @@ if [ -z $ipnotset ] ; then echo 'No ip was set for the remote ssh server' ; exit
 if [ ! -e /tmp/scp-receive ] ; then mkdir /tmp/scp-receive ; fi
 
 for i in ${PKG[@]} ; do
-  missing_deps $i ; done
-
-for i in ${PKG[@]} ; do
-  deps_build $i ; done
+  deps_calc $i ; done
 
 
-ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" pkg="`echo '('${PKG[@]}')'`" dep="`echo '(' ${DEP[@]} ')'`" bld="`echo '(' ${BLD[@]} ')'`" '
+
+ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" "
+export pkg=\"$(echo ${PKG[@]})\" " "
+export dep=\"$(echo ${DEP[@]})\" " '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
+declare -a old_DEPs
+declare -a DEP
+declare -a PKG
+export PKGDEST="/tmp/scp"
+
+for i in $dep $pkg
+  do PKG=( ${PKG[@]} $i )
+done
+
 function check_installed {
-  pacman -Qi $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-    then pacman -Qsq ^$1\$ 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-      then pacman -Si $1 2> /dev/null > /dev/null ; if [ ! $? = 0 ]
-        then return 1
+  pacman -Qi $1 &> /dev/null ; if [ ! $? = 0 ]
+    then pacman -Qsq ^$1\$ &> /dev/null ; if [ ! $? = 0 ]
+      then pacman -Si $1 &> /dev/null ; if [ ! $? = 0 ]
+        then DEP=( $1 ${DEP[@]/%$1} ) && return 1
       fi
     fi
   fi
+}
+
+function deps_calc {
+  if [ "$(echo ${TEMP[@]} | grep $@)" ]
+    then break 1
+  fi
+  temp=$(cower --format='%D %K %M' -i $@)
+  for i in $temp
+    do while true
+      do temp2=$(echo $i | cut -f1 -d">")
+      TEMP=( $temp2 ${TEMP[@]} )
+      check_installed $temp2
+        if [ "$?" = 1 ]
+          then deps_calc $temp2
+          else break 1
+        fi
+      done
+  done
+}
+
+function Build_deps {
+  cower -fd $1 ; cd $1
+  if [ -e ~/.config/aur-hooks/$1.hook ]
+    then bash ~/.config/aur-hooks/$1.hook
+  fi
+  $EDITOR PKGBUILD ; yes \  | makepkg -fsri
+  old_DEPs=( $1 ${old_DEPs[@]} )
+}
+
+function Build {
+  cower -fd $1 ; cd $1
+  if [ -e ~/.config/aur-hooks/$1.hook ]
+    then bash ~/.config/aur-hooks/$1.hook
+  fi
+  $EDITOR PKGBUILD ; yes \  | makepkg -fsr
 }
 
 sudo -v
 sudo pacman -Syu
 
-declare -a old_DEPs
-dep_num=1
+[ ! -e /tmp/scp ] && mkdir /tmp/scp
+[ ! -e /tmp/build ] && mkdir /tmp/build
+cd /tmp/build
 
-function buildpkgdeps {
-  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sri
-  cd /tmp/build ; rm -rf $1
-}
-
-function buildpkg {
-  cower -d $1 ; cd $1 ; $EDITOR PKGBUILD ; yes | makepkg -sr
-  cd /tmp/build ; rm -rf $1
-}
-
-function built {
-  local built=$(find /tmp/scp/ -name "*.pkg.*" | grep $1)
-  if [[ ! -z $builtat ]]
-    then echo Found previously built packages.
-    export builtat="$built $builtat"
-    else return 0
-  fi
-}
-
-if [ ! -e /tmp/scp ] ; then mkdir /tmp/scp ; fi
-if [ ! -e /tmp/build ] ; then mkdir /tmp/build ; fi ; cd /tmp/build
-
-for i in $(echo ${bld[@]}) ; do
-  if [ -z "$(echo ${pkg[@]} | grep $i)" ] || [ -z "$(echo ${dep[@]} | grep $i)" ]
-    then check_installed $i ;  if [ $? = 1 ]
-      then built $i ; if [ ! $? = 0 ]
-        then sudo pacman -U $builtat
-        else buildpkgdeps $i
-      fi
-      old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
-    fi
-  fi
+for i in ${PKG[@]}
+  do deps_calc $i
 done
 
-export PKGDEST="/tmp/scp"
-
-for i in $(echo ${dep[@]}) ; do
-  built $i ; if [ ! $? = 0 ]
-    then sudo pacman -U $builtat ; old_DEPs[$dep_num]=$i ; dep_num=$((dep_num+1))
-    else buildpkgdeps $i
-  fi
+for i in ${DEP[@]}
+ do Build_deps $i
+ PKG=( ${PKG[@]/%$i} )
 done
 
-for i in $(echo ${pkg[@]}) ; do
-  if [ -z $(echo ${dep[@]} | grep $i) ]
-    then built $i ; if [ $? = 0 ]
-      then buildpkg $i
-    fi
-    else echo $i has already been built
-  fi
+for i in ${PKG[@]} ; do
+  Build $i
 done
 
-if [ ! -z ${old_DEPs[@]} ] ; then
+if [ ! -z "${old_DEPs[@]}" ] ; then
   yes | sudo pacman -Rc ${old_DEPs[@]} ; fi
 
 rm -rf /tmp/build/
