@@ -4,6 +4,7 @@ declare -a PKG
 declare -a DEP
 declare -a TEMP
 editor=/bin/true
+CFLAGS=( $(gcc -march=native -Q --help=target | grep enable | cut -d ' ' -f 3) -O2 -pipe -fstack-protector-strong )
 
 function ipset {
   if [ -z $ipnotset ]
@@ -83,7 +84,9 @@ for i in ${PKG[@]} ; do
 
 ssh -t $ip $(echo '-p' $port) export "EDITOR=$editor" "
 export pkg=\"$(echo ${PKG[@]})\" " "
-export dep=\"$(echo ${DEP[@]})\" " '
+export dep=\"$(echo ${DEP[@]})\" " "
+export CFLAGS=\"${CFLAGS[@]}\" " "
+export CXXFLAGS=\"${CFLAGS[@]}\" " '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
 
 declare -a old_DEPs
