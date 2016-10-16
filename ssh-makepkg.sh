@@ -88,6 +88,8 @@ export dep=\"$(echo ${DEP[@]})\" " "
 export CFLAGS=\"${CFLAGS[@]}\" " "
 export CXXFLAGS=\"${CFLAGS[@]}\" " '
 PATH="/usr/local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"' '
+echo CFLAGS=\"$CFLAGS\" > ~/.makepkg.conf
+echo CXXFLAGS=\"${CFLAGS[@]}\" >> ~/.makepkg.conf
 
 declare -a old_DEPs
 declare -a DEP
